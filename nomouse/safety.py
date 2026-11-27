@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
+from threading import Lock
 
 
 @dataclass
@@ -18,12 +20,27 @@ class WindowBounds:
 
 
 class WindowSafetyGuard:
-    def __init__(self, window_name: str, enabled: bool = True):
+    def __init__(
+        self,
+        window_name: str,
+        enabled: bool = True,
+        bounds_provider: Callable[[], WindowBounds | None] | None = None,
+    ):
         self.window_name = window_name
         self.enabled = enabled
         self.last_reason = ""
+        self._bounds_provider = bounds_provider
+        self._bounds_lock = Lock()
+
+    def set_bounds_provider(self, provider: Callable[[], WindowBounds | None] | None) -> None:
+        with self._bounds_lock:
+            self._bounds_provider = provider
 
     def _bounds(self) -> WindowBounds | None:
+        with self._bounds_lock:
+            provider = self._bounds_provider
+        if provider is not None:
+            return provider()
         try:
             import cv2
             x, y, width, height = cv2.getWindowImageRect(self.window_name)

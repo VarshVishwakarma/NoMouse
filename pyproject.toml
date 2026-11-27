@@ -17,10 +17,11 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0.0", "ruff>=0.6.0"]
+dev = ["pytest>=8.0.0", "ruff>=0.6.0", "PyInstaller>=6.0,<7", "pip-audit>=2.10,<3"]
 
 [project.scripts]
-nomouse = "nomouse.app:run"
+nomouse = "nomouse.gui:main"
+nomouse-cli = "nomouse.app:run"
 
 [tool.setuptools.dynamic]
 version = { attr = "nomouse.__version__" }
@@ -28,6 +29,9 @@ dependencies = { file = ["requirements.txt"] }
 
 [tool.setuptools.packages.find]
 include = ["nomouse*"]
+
+[tool.setuptools.package-data]
+nomouse = ["models/*.task"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

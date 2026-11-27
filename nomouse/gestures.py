@@ -14,7 +14,7 @@ FINGER_JOINTS = {
 }
 
 
-def classify_hand(hand: HandObservation) -> Gesture:
+def classify_hand(hand: HandObservation, pinch_threshold: float = 0.34) -> Gesture:
     """Classify a single frame. Temporal confirmation belongs to GestureConsensus."""
     p = hand.landmarks
     if len(p) != 21:
@@ -45,7 +45,7 @@ def classify_hand(hand: HandObservation) -> Gesture:
             return Gesture.THREE_FINGERS
         if index and middle and not ring and not pinky:
             return Gesture.TWO_FINGERS
-        if pinch_ratio < 0.34 and not middle and not ring and not pinky:
+        if pinch_ratio < min(0.50, max(0.20, float(pinch_threshold))) and not middle and not ring and not pinky:
             return Gesture.PINCH
         if open_count == 0:
             return Gesture.FIST

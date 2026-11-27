@@ -1,5 +1,28 @@
 # Changelog
 
+## 3.0.0 — Desktop application
+
+### Added
+- Native Qt Widgets dashboard with an embedded camera preview, background camera/control worker, live gesture status, pause/stop, settings, onboarding, guided calibration, and aggregate-only diagnostic export.
+- Local bundled MediaPipe Hand Landmarker task model, so inference remains offline after installation.
+- Configurable pinch sensitivity and enable/disable controls for click, right-click, scroll, browser-back, landmarks, and preview safety.
+- Camera index, resolution, and requested capture-FPS settings with range validation; actual capture rate remains device-dependent.
+- Session FPS, capture/inference/decision timing, processing p50/p95, delayed-frame intervals, and tracking-interruption counters.
+- PyInstaller Windows onedir build recipe, Windows build helper, package smoke-build workflow, and runtime dependency audit workflow.
+
+### Changed
+- The `nomouse` and `python main.py` launchers now open the desktop application. The original OpenCV loop remains available as `nomouse-cli`.
+- Hand tracking migrated from the removed `mp.solutions` API to MediaPipe Tasks VIDEO mode. The official hand model is bundled; runtime use does not fetch models from the network.
+- Scroll anchoring now follows the palm center rather than the index fingertip, reducing sensitivity to fingertip movement. The calibration page can recenter the neutral position during a two-finger pose.
+- OS input failures fail closed. A potentially held left button is tracked before `mouseDown`; an uncertain failed release remains explicitly latched and blocks further control instead of being reported as released.
+- Runtime dependencies move to MediaPipe 0.10.35 and protobuf 5.29.6, removing the audited protobuf 4.x resolution while preserving supported Python 3.10–3.12.
+
+### Validation and limitations
+- Automated tests cover synthetic control behavior, input fault injection, GUI construction/settings persistence, and initialization/inference of the bundled model.
+- Automated checks are not a substitute for webcam, Windows desktop, comfort, or long-session validation.
+- Pillow 13 is constrained to Python 3.11+ because its published package requires Python 3.11. Python 3.10 remains supported but may resolve an advisory-affected Pillow 12.x through transitive dependencies; see `SECURITY.md`.
+- No signed installer or release executable is published by this change.
+
 ## 2.5.3 — Persistent Preview Window
 
 ### Fixed

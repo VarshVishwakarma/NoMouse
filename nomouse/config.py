@@ -31,6 +31,7 @@ class AppConfig:
     camera_index: int = 0
     camera_width: int = 640
     camera_height: int = 480
+    camera_fps: int = 30
     model_complexity: int = 0
     mirror_preview: bool = True
     max_hands: int = 1
@@ -59,12 +60,18 @@ class AppConfig:
     right_click_tap_max_s: float = 0.45
     drag_hold_s: float = 0.42
     three_finger_double_click_enabled: bool = False
+    left_click_enabled: bool = True
+    right_click_enabled: bool = True
+    scroll_enabled: bool = True
+    browser_back_enabled: bool = True
+    pinch_threshold: float = 0.34
     hud_enabled: bool = True
     show_landmarks: bool = True
     show_help_on_start: bool = True
     safety_guard_enabled: bool = True
     # Keep the OpenCV preview visible above other apps for demos and daily use.
     preview_always_on_top: bool = True
+    onboarding_complete: bool = False
 
 
 # Settings are clamped to safe/meaningful ranges when loaded from disk. This prevents
@@ -84,6 +91,7 @@ _FLOAT_RANGES: dict[str, tuple[float, float]] = {
     "scroll_max_speed": (1.0, 80.0),
     "scroll_full_speed_px": (40.0, 800.0),
     "scroll_filter_min_cutoff": (0.5, 12.0),
+    "pinch_threshold": (0.20, 0.50),
     "right_click_tap_max_s": (0.10, 1.0),
     "drag_hold_s": (0.25, 1.25),
 }
@@ -93,6 +101,7 @@ _INT_RANGES: dict[str, tuple[int, int]] = {
     "camera_index": (0, 16),
     "camera_width": (320, 1920),
     "camera_height": (240, 1080),
+    "camera_fps": (10, 60),
     "model_complexity": (0, 1),
     "max_hands": (1, 2),
     "click_confirm_frames": (1, 8),
@@ -110,6 +119,11 @@ _BOOL_FIELDS = {
     "show_help_on_start",
     "safety_guard_enabled",
     "preview_always_on_top",
+    "onboarding_complete",
+    "left_click_enabled",
+    "right_click_enabled",
+    "scroll_enabled",
+    "browser_back_enabled",
 }
 
 

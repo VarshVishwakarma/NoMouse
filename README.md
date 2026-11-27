@@ -1,25 +1,32 @@
-# NoMouse v2.5.3
+# NoMouse 3.0.0
 
-**Control your Windows PC with your hand and a webcam.** NoMouse tracks your hand with MediaPipe, turns a handful of simple poses into mouse actions, and keeps everything on your machine: no cloud, no account, no network connection.
+**A local-first Windows desktop application for hands-free mouse control.** NoMouse uses a webcam and MediaPipe hand landmarks to move the pointer, click, drag, scroll, and pause control. The desktop interface embeds the camera preview, provides settings and guided setup, and keeps computer-vision processing on your device.
 
-- **Move** the cursor by pointing your index finger.
-- **Click, drag, right-click, scroll, and go back** with pinches and finger counts.
-- **Fails safe.** A held drag is released if tracking is lost, the camera stops, you pause, or the app exits. Actions are blocked over the preview window, and PyAutoGUI's emergency stop stays on.
+[![Tests](https://github.com/VarshVishwakarma/NoMouse/actions/workflows/tests.yml/badge.svg)](https://github.com/VarshVishwakarma/NoMouse/actions/workflows/tests.yml)
 
-> Real-world feel depends on your webcam, lighting, and PC. The automated tests cover the control logic with synthetic hands and fake input, but they cannot judge latency or comfort on your hardware. See [Tuning](#tuning-the-feel).
+> **Hardware note:** Automated tests use synthetic hands and fake input. They verify control logic and the bundled model's software interface, but do not establish gesture accuracy, comfort, end-to-end latency, or compatibility with your camera and applications. Keep a physical mouse nearby, especially during first use.
 
-## Quick start (Windows)
+## What it does
 
-1. Install **Python 3.11, 64-bit** from [python.org](https://www.python.org/downloads/release/python-3119/).
-2. Double-click **`install_windows.bat`**. It creates a `.venv` and installs the pinned dependencies.
-3. Double-click **`run_nomouse.bat`**.
+- **Move:** Point with your index finger.
+- **Left-click:** Brief thumb-index pinch.
+- **Drag:** Hold the pinch, move, then release.
+- **Right-click:** Tap with two fingers while keeping the hand still.
+- **Scroll:** Hold two fingers above or below the palm's gesture-start position; press **Recenter scroll neutral** on the Calibration page to establish a new baseline.
+- **Browser back:** Optional four-finger pose; can be disabled in Settings.
+- **Pause safely:** Use the dashboard's Pause control. Stop closes the camera session and releases controls.
 
-Press **H** in the preview window for an on-screen gesture guide. Keep a physical mouse nearby the first time, and test over a harmless window such as a blank Notepad document.
+The interface includes an embedded live preview, hand-landmark overlay, connection and gesture status, session-rate and processing metrics, persistent settings, first-run onboarding, calibration guidance, and aggregate diagnostic export. Diagnostics contain no camera frames or landmark coordinates.
 
-If anything fails, double-click **`diagnose_windows.bat`**; it prints your Python, package versions, and settings location without touching the camera or mouse.
+## Install on Windows
 
-<details>
-<summary>Manual setup (PowerShell)</summary>
+1. Install **64-bit Python 3.11**. Python 3.10–3.12 are supported; Python 3.11 is recommended for the available security-fixed Pillow release.
+2. Double-click `install_windows.bat`. It creates a local virtual environment and installs the pinned application dependencies.
+3. Double-click `run_nomouse.bat`.
+
+The first launch explains camera placement, basic gestures, pause, and the emergency stop. Choose a camera index and resolution in Settings if the default camera does not open. Grant camera access in Windows privacy settings.
+
+For manual installation:
 
 ```powershell
 py -3.11 -m venv .venv
@@ -28,156 +35,89 @@ py -3.11 -m venv .venv
 .\.venv\Scripts\python.exe main.py
 ```
 
-Keep the package folder named `nomouse`, whatever you call the outer folder.
-</details>
+Or install the package with `python -m pip install .` and run `nomouse`. `python -m nomouse` is also supported. The previous OpenCV-only control loop is still available as `nomouse-cli` or `python -m nomouse.app`.
 
-## Keep the preview visible during demos
+Settings are stored in `config/settings.json` in a source checkout, or `%APPDATA%\NoMouse\settings.json` for an installed copy. Pass `--config PATH` to use another file.
 
-The preview is configured to stay above other windows by default, so it remains visible while you click or type in a browser, editor, or desktop application. On Windows the app uses the native window manager with `NOACTIVATE`, so reasserting topmost does not intentionally steal focus from the application you are using. If the preview is accidentally minimized, the app attempts to restore it without activating it. This behavior is useful for screen recordings, but can be disabled with the **O** hotkey.
+## Desktop application
 
-- Press **O** in the preview window to toggle always-on-top.
-- `preview_always_on_top` in `config/settings.json` sets the startup default.
-- Keep the preview small and move it to a corner before recording; action safety checks continue to block actions over its bounds.
+The sidebar provides:
 
-## Gestures
+- **Dashboard:** Start, Pause, Stop, live preview, recognized gesture, FPS, processing p95, and tracking status.
+- **Calibration:** Camera and hand-position guidance, active-region/smoothing/scroll tuning, and a live scroll-neutral recenter action.
+- **Settings:** Camera index, resolution, and requested capture rate; cursor smoothing and active margin; pinch threshold and confirmation frames; drag delay; scroll rate, deadzone, wheel step and direction; tracking confidence; and controls to enable/disable gestures and safety options.
+- **Guide:** In-app explanations of the supported gestures.
+- **Diagnostics:** Capture/inference/decision timing, processing p50/p95, slow frame intervals, tracking interruptions, and JSON export.
 
-| Action | Gesture | Notes |
-|---|---|---|
-| Move cursor | Index finger extended | The pointer follows your fingertip. |
-| Left-click | Quick thumb-index pinch, then release | Fires on release. |
-| Drag and drop | Hold the pinch (about 0.4 s) | Move your hand to drag; release the pinch to drop. |
-| Double-click | Two quick pinch-and-release taps | Uses two normal clicks, so Windows' own double-click timing applies. |
-| Right-click | Brief, still two-finger pose (index + middle) | Vertical movement cancels it and scrolls instead. |
-| Scroll | Two fingers, then hold your hand above or below where it started | Farther from the start scrolls faster; back at the start stops. See [Scrolling](#scrolling). |
-| Browser back | Four fingers up, thumb tucked | Sends `Alt`+`Left` to the foreground app. |
-| Rest | Open palm or fist | No mouse action. Use **P** to genuinely pause. |
+Stop the live session before applying settings. Configuration is range-checked and saved atomically. Capture FPS is a requested camera-driver target and may be ignored by some devices. The preview safety guard blocks computer-input actions when the pointer is over the embedded camera preview or when its bounds cannot be established.
 
-An optional three-finger double-click exists but is off by default; set `three_finger_double_click_enabled` to `true` to enable it.
+### Safety and privacy
 
-### Keyboard (preview window focused)
+- PyAutoGUI's physical-mouse corner fail-safe remains enabled.
+- The controller records a possible held button before sending a drag press. If release fails, NoMouse preserves the uncertain state, disables further control, and reports the error rather than claiming success.
+- Camera frames and inference remain local. The bundled model avoids a runtime model download. No cloud account, telemetry, or recording is provided.
+- NoMouse controls desktop input. Verify the target application and gesture before clicking or dragging; a physical mouse remains the recovery path.
 
-| Key | Action |
-|---|---|
-| `H` | Show or hide the gesture guide (shown for a few seconds at startup) |
-| `P` | Pause or resume mouse control |
-| `+` / `-` | Steadier or more responsive cursor |
-| `L` | Toggle hand landmarks (turn off if drawing costs you frames) |
-| `O` | Toggle preview always-on-top (useful for screen recordings) |
-| `Q` or `Esc` | Quit (closing the window also quits) |
+## Performance and diagnostics
 
-Your `+`/`-` and `L` choices are saved when you quit, unless you launch with `--no-save`.
+During a session the dashboard reports the camera read duration, MediaPipe inference duration, gesture/controller decision duration, application frame rate, processing p50/p95, delayed processing intervals over 33 ms, and tracking-loss transitions. The displayed processing timings exclude camera exposure and display scan-out, so they are not physical camera-to-screen latency measurements. No benchmark or universal FPS claim is made; results depend on camera and hardware.
 
-## Safety
+The exported JSON contains the aggregate measurements, NoMouse version, platform description, and a small set of non-sensitive settings. It does not contain images, hand landmarks, account data, or camera recordings.
 
-- **Emergency stop.** Move the *physical* mouse into any screen corner and NoMouse pauses itself the next time it tries to send input. Press `P` to resume. Your hand can no longer trigger this by accident: hand-driven movement is kept a couple of pixels (`screen_edge_inset_px`) from the screen edges, so reaching for a window's close button is fine.
-- **Preview-window guard.** Clicks, scrolls, and shortcuts are blocked while the pointer is over NoMouse's own preview window (the HUD shows **SAFETY HOLD**), or when its position can't be verified. Move the preview aside if you need that area.
-- **Drag release.** A held drag is released on tracking loss, a camera read failure, pausing, a crash, or shutdown.
-- **No actions from ambiguous frames.** One unclear frame is tolerated without breaking your gesture, but it never produces a click.
-- **Local only.** Camera frames are processed on your machine and never leave it.
+## Architecture
 
-## Tuning the feel
-
-Start with the defaults. If the pointer lags your hand, press `-` once or twice; if it shakes when your hand is still, press `+` once. Make small changes.
-
-The cursor filter is adaptive: smoothing sets stability at rest, while fast movement automatically loosens it for responsiveness. It works in desktop pixels, so feel can differ between monitors and cameras. If the FPS readout in the HUD is low (amber or red), try turning landmarks off (`L`), keeping `model_complexity` at `0`, or closing other camera apps.
-
-### Scrolling
-
-Scrolling works like a joystick. The height where you raise two fingers (index and middle) is the **neutral point**.
-
-1. Raise two fingers and hold still for a moment.
-2. Move your hand **down** to scroll down, or **up** to scroll up. A small dead zone around neutral keeps a resting hand from scrolling.
-3. The farther you move from neutral, the faster it scrolls. Return to neutral to stop.
-
-There is nothing to re-arm, and moving back never scrolls the other way. If your hand slowly sinks while resting, the neutral point follows it.
-
-Tuning, all in `config/settings.json`:
-
-| Setting | Effect |
-|---|---|
-| `scroll_max_speed` | Top speed in wheel notches per second (default 25). |
-| `scroll_full_speed_px` | How far past the dead zone you must move to reach top speed (default 200). Lower it if you want to reach top speed with less movement. |
-| `scroll_deadzone_px` | Size of the neutral zone (default 20). Raise it if a resting hand drifts into scrolling. |
-| `scroll_invert` | `true` flips the direction ("natural" scrolling). |
-| `scroll_wheel_step` | Smallest wheel step sent, out of 120 per notch (default 40, for smooth slow scrolling). If a specific app ignores slow scrolling, set this to `120`. |
-
-Distances are measured as if your screen were 1080 pixels tall, so scrolling feels the same on any monitor.
-
-## Settings
-
-Settings are a JSON file: `config/settings.json` in this folder (or `%APPDATA%\NoMouse\settings.json` if you installed with `pip`). Edit it while NoMouse is closed, or pass another file with `--config`. Values are clamped to safe ranges; unknown keys are ignored; a damaged file falls back to defaults.
-
-| Group | Keys |
-|---|---|
-| Camera | `camera_index`, `camera_width`, `camera_height`, `mirror_preview` |
-| Tracking | `min_detection_confidence`, `min_tracking_confidence`, `model_complexity`, `max_hands` |
-| Cursor | `active_margin`, `cursor_smoothing`, `cursor_move_deadband_px`, `screen_edge_inset_px` |
-| Clicks | `click_confirm_frames`, `right_click_confirm_frames`, `drag_hold_s`, `*_cooldown_s` |
-| Scrolling | `scroll_deadzone_px`, `scroll_max_speed`, `scroll_full_speed_px`, `scroll_wheel_step`, `scroll_invert`, `scroll_filter_min_cutoff` |
-| Interface | `hud_enabled`, `show_landmarks`, `show_help_on_start`, `safety_guard_enabled`, `preview_always_on_top` |
-
-### Command line
-
-```text
-python main.py [--config PATH] [--camera N] [--no-save] [--version]
+```mermaid
+flowchart LR
+    cam[Local webcam] --> worker[Qt worker thread]
+    worker --> mp[MediaPipe Tasks VIDEO]
+    model[Bundled hand_landmarker.task] --> mp
+    mp --> obs[Hand observations]
+    obs --> classify[Rule-based gesture classification]
+    classify --> consensus[Consecutive-frame consensus]
+    consensus --> filter[Cursor and palm-center scroll filters]
+    filter --> control[MouseController state machine]
+    control --> safety[Preview guard and fail-safe]
+    safety --> os[PyAutoGUI desktop input]
+    worker --> preview[Embedded Qt preview]
+    worker --> metrics[Session metrics]
 ```
 
-`--camera` overrides `camera_index` (handy when a virtual camera is device 0). `python -m nomouse` is equivalent to `python main.py`, and `pip install .` adds a `nomouse` command.
+The GUI is in `nomouse/gui.py`; the camera/control lifecycle is in `nomouse/gui_worker.py`. `nomouse/tracker.py` owns MediaPipe Tasks, and the existing pure/testable gesture pipeline and controller remain in `nomouse/app.py`, `nomouse/gestures.py`, and `nomouse/controller.py`. Configuration and safety boundaries are implemented in `nomouse/config.py` and `nomouse/safety.py`.
 
-## Troubleshooting
+The hand classifier remains a deterministic geometric ruleset, not a trained or accuracy-benchmarked model. MediaPipe supplies landmarks and handedness; NoMouse's gesture choices are derived from landmark geometry and temporal confirmation. The scroll neutral point uses the palm-center landmarks rather than the index fingertip to reduce sensitivity to finger movement. The previous `model_complexity` setting is retained for old settings files but does not choose a different Tasks model in this release.
 
-| Symptom | Try |
-|---|---|
-| "Could not open the webcam" | Allow camera access in Windows Settings, close other apps using the camera, or try `--camera 1`. |
-| "`mediapipe.solutions` is unavailable" | NoMouse needs the pinned `mediapipe==0.10.21`. Re-run `install_windows.bat` inside the project's `.venv`. |
-| Setup fails on Python | Use **64-bit Python 3.11**. 32-bit builds and Python 3.13+ are not supported by the pinned packages. |
-| HUD shows **SAFETY HOLD** | The pointer is over the preview window. Move the preview to another part of the screen. |
-| Control paused by itself | The emergency stop fired (physical mouse in a screen corner). Press `P` to resume. |
-| Clicks land slightly off target | The pointer freezes as soon as your pose stops looking like pointing. Bring your thumb to your index finger instead of curling the index toward the thumb, since a curling fingertip moves. |
-
-## Development
+## Development and validation
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 .\.venv\Scripts\python.exe -m ruff check .
+$env:QT_QPA_PLATFORM = "offscreen"
 .\.venv\Scripts\python.exe -m pytest -q
 ```
 
-The suite runs without a webcam, MediaPipe, or a desktop session: it feeds synthetic hand landmarks through the real pipeline into a fake mouse, and it exercises the full `run()` loop with a fake camera (including "camera dies mid-drag"). GitHub Actions runs lint and tests on Windows and Linux for Python 3.10 to 3.12.
+The test suite includes unit tests, synthetic gesture-to-input pipeline checks, fault-injected mouse press/release errors, offscreen GUI/settings tests, and a MediaPipe Tasks model smoke test when runtime dependencies are installed. GitHub Actions also builds a Windows onedir package and audits the Python 3.11 runtime dependency set.
 
-`tools/windows_scroll_diagnostic.py` sends *real* scroll events to the window under the pointer; run it only over a harmless page.
+## Build a Windows application folder
 
-### How it fits together
-
-```mermaid
-flowchart LR
-    cam[Webcam] --> trk[tracker.py<br/>MediaPipe Hands]
-    trk --> cls[gestures.py<br/>classify + confirm]
-    cls --> pipe[app.py<br/>GesturePipeline]
-    flt[filters.py<br/>One Euro smoothing] --> pipe
-    pipe --> ctl[controller.py<br/>state machine]
-    scr[scrolling.py<br/>rate scroller] --> ctl
-    saf[safety.py<br/>window guard] --> ctl
-    ctl --> os[PyAutoGUI<br/>mouse and keys]
-    pipe --> hud[hud.py<br/>preview overlay]
-```
-
-```text
-nomouse/
-├── main.py                  launcher
-├── nomouse/                 app, config, controller, filters, geometry,
-│                            gestures, hud, safety, scrolling, tracker, types
-├── config/settings.json
-├── tests/                   unit, pipeline, and headless full-loop tests
-└── tools/                   diagnose.py, windows_scroll_diagnostic.py
-```
+`build_windows.bat` builds `dist\NoMouse\NoMouse.exe` using PyInstaller. It requires the installed application environment and PyInstaller. This is a developer build recipe, not a signed installer or a published release. Qt is distributed under its applicable LGPL/GPL or commercial terms; review `THIRD_PARTY_NOTICES.md` before redistributing a bundled build.
 
 ## Known limitations
 
-- Windows-focused engineering baseline, not a calibrated accessibility product.
-- Uses MediaPipe's legacy `mp.solutions.hands` API, hence the pinned dependencies.
-- Pose recognition varies with camera angle, lighting, partial occlusion, and hand position.
-- Scroll speed depends on how far your hand is from where the gesture began, so a long scroll session can need a re-centering pause if your hand has wandered.
-- Passing tests do not replace trying it on your own camera and screen.
+- Windows is the primary interaction target. Linux CI coverage is for automated logic; this is not a claim of tested desktop-input support on Linux or macOS.
+- The geometric gesture thresholds have no real-user precision, recall, confusion-matrix, or false-activation study.
+- Camera angle, lighting, occlusion, motion blur, hand comfort, multiple simultaneous hands, and real Windows wheel-event behavior need hardware validation.
+- The first version of the desktop interface has a dark theme only. Camera choices are device indices rather than an enumerated device-name list.
+- Python 3.10 may resolve Pillow 12.x through transitive dependencies because Pillow 13 requires Python 3.11+. See `SECURITY.md`.
+- The package build is not code-signed; no one-click public installer is published.
 
-See [CHANGELOG.md](CHANGELOG.md) for release notes.
+## Documentation and contribution
+
+- [User guide](USER_GUIDE.md)
+- [Architecture](ARCHITECTURE.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
+- [Third-party notices](THIRD_PARTY_NOTICES.md)
+- [Portfolio showcase](PORTFOLIO-SHOWCASE.md)
+- [Changelog](CHANGELOG.md)
+
+NoMouse is MIT-licensed. Contributions should include focused tests and must preserve the physical emergency fail-safe and fail-closed behavior.

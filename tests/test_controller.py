@@ -233,3 +233,71 @@ def test_pausing_during_drag_releases_left_button():
     assert not c.enabled
     assert not c.dragging
     assert ('up', 'left') in m.events
+
+
+def test_mouse_down_exception_attempts_release_and_locks_out_further_input():
+    class UncertainMouse(FakeMouse):
+        def mouseDown(self, button="left"):
+            self.events.append(("down", button))
+            raise OSError("input call failed after reaching the OS")
+
+    mouse = UncertainMouse()
+    c = MouseController(AppConfig(drag_hold_s=0.25), SafeGuard(), mouse_api=mouse)
+    update(c, Gesture.POINT, 0.9)
+    update(c, Gesture.PINCH, 1.0)
+    update(c, Gesture.PINCH, 1.3)
+    assert ("down", "left") in mouse.events
+    assert ("up", "left") in mouse.events
+    assert not c.held_buttons
+    assert not c.dragging
+    assert not c.enabled
+    assert c.fatal_input_error is not None
+    before = len(mouse.events)
+    c.toggle_enabled()
+    update(c, Gesture.POINT, 1.5)
+    assert not c.enabled
+    assert len(mouse.events) == before
+
+
+def test_failed_mouse_release_keeps_explicit_uncertain_button_state():
+    class UncertainReleaseMouse(FakeMouse):
+        def mouseUp(self, button="left"):
+            raise OSError("mouse release rejected")
+
+    mouse = UncertainReleaseMouse()
+    c = MouseController(AppConfig(drag_hold_s=0.25), SafeGuard(), mouse_api=mouse)
+    update(c, Gesture.POINT, 0.9)
+    update(c, Gesture.PINCH, 1.0)
+    update(c, Gesture.PINCH, 1.3)
+    assert c.dragging and c.held_buttons == {"left"}
+
+    c.handle_tracking_loss()
+    assert c.dragging and c.held_buttons == {"left"}
+    assert not c.enabled
+    assert "mouseUp failed" in c.fatal_input_error
+    c.toggle_enabled()
+    assert not c.enabled
+
+
+def test_input_api_failure_disables_controller_instead_of_reporting_success():
+    class FailingMoveMouse(FakeMouse):
+        def moveTo(self, x, y, duration=0):
+            raise OSError("desktop input unavailable")
+
+    mouse = FailingMoveMouse()
+    c = MouseController(AppConfig(), SafeGuard(), mouse_api=mouse)
+    c.move(500, 300)
+    assert not c.enabled
+    assert "moveTo failed" in c.fatal_input_error
+    assert "INPUT ERROR" in c.notification
+
+
+def test_optional_interactions_can_be_disabled_without_affecting_other_actions():
+    c, mouse = make_controller(right_click_enabled=False, scroll_enabled=False, browser_back_enabled=False)
+    update(c, Gesture.TWO_FINGERS, 1.0, (400, 300))
+    update(c, Gesture.TWO_FINGERS, 1.1, (400, 450))
+    update(c, Gesture.POINT, 1.2, (400, 300))
+    update(c, Gesture.FOUR_FINGERS, 1.4, raw_gesture=Gesture.FOUR_FINGERS)
+    assert not events(mouse, "click")
+    assert not events(mouse, "scroll")
+    assert not events(mouse, "hotkey")

@@ -134,3 +134,12 @@ def test_gesture_transition_requires_consecutive_frames_not_accumulated_votes():
 
 def test_malformed_landmark_count_returns_unknown_instead_of_crashing():
     assert classify_hand(HandObservation(tuple([(0.5, 0.5, 0.0)] * 20))) == Gesture.UNKNOWN
+
+
+def test_pinch_threshold_is_configurable_and_bounded():
+    points = list(_synthetic_pinch_hand(touching=True).landmarks)
+    points[4] = (points[4][0] + 0.06, points[4][1], points[4][2])
+    hand = HandObservation(tuple(points))
+    assert classify_hand(hand, pinch_threshold=0.34) == Gesture.PINCH
+    assert classify_hand(hand, pinch_threshold=0.20) == Gesture.FIST
+    assert classify_hand(hand, pinch_threshold=3.0) == Gesture.PINCH
