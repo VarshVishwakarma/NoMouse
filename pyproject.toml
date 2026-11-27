@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nomouse"
+dynamic = ["version", "dependencies"]
+description = "Touchless mouse control with your webcam: local hand tracking, stable gestures, safe recovery."
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+keywords = ["hand-tracking", "mediapipe", "accessibility", "touchless", "webcam"]
+classifiers = [
+  "Environment :: Win32 (MS Windows)",
+  "Intended Audience :: End Users/Desktop",
+  "Programming Language :: Python :: 3",
+  "Topic :: Multimedia :: Video :: Capture",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0.0", "ruff>=0.6.0"]
+
+[project.scripts]
+nomouse = "nomouse.app:run"
+
+[tool.setuptools.dynamic]
+version = { attr = "nomouse.__version__" }
+dependencies = { file = ["requirements.txt"] }
+
+[tool.setuptools.packages.find]
+include = ["nomouse*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+extend-exclude = ["build", "dist"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = [
+  "E741",  # short names like `l` are fine in small geometry helpers
+]
