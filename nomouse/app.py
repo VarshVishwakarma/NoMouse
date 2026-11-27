@@ -53,6 +53,7 @@ class FrameOutcome:
     raw_gesture: Gesture = Gesture.UNKNOWN
     gesture: Gesture = Gesture.UNKNOWN
     cursor_xy: tuple[float, float] | None = None
+    scroll_y: float | None = None
     dispatched: bool = False
 
 
@@ -99,6 +100,11 @@ class GesturePipeline:
             )
         return anchor
 
+    @staticmethod
+    def _scroll_anchor_y(hand: HandObservation) -> float:
+        """Track the palm center, not a moving fingertip, for scroll intent."""
+        return sum(hand.landmarks[index][1] for index in PALM_LANDMARKS) / len(PALM_LANDMARKS)
+
     def step(
         self,
         observations: Sequence[HandObservation],
@@ -112,14 +118,22 @@ class GesturePipeline:
 
         if observations:
             hand = observations[0]
-            outcome.raw_gesture = classify_hand(hand)
+            outcome.raw_gesture = classify_hand(hand, config.pinch_threshold)
             anchor = self._cursor_anchor(hand, outcome.raw_gesture)
             raw_sx, raw_sy = to_screen_float(
                 anchor[0], anchor[1], screen_w, screen_h,
                 config.active_margin, config.screen_edge_inset_px,
             )
             outcome.cursor_xy = self.smoother.apply(raw_sx, raw_sy, now_perf)
-            raw_scroll_y = raw_sy * (SCROLL_REFERENCE_HEIGHT / max(1, screen_h))
+            _, palm_screen_y = to_screen_float(
+                anchor[0],
+                self._scroll_anchor_y(hand),
+                screen_w,
+                screen_h,
+                config.active_margin,
+                config.screen_edge_inset_px,
+            )
+            raw_scroll_y = palm_screen_y * (SCROLL_REFERENCE_HEIGHT / max(1, screen_h))
 
         # Feed UNKNOWN through the consensus so one transient missed/ambiguous frame
         # gets a short grace period instead of immediately wiping filter history.
@@ -147,6 +161,7 @@ class GesturePipeline:
         elif current != Gesture.TWO_FINGERS and previous == Gesture.TWO_FINGERS:
             self.scroll_smoother.reset()
 
+        outcome.scroll_y = scroll_y
         # Never execute mouse actions from a low-confidence/ambiguous frame. The
         # consensus preserves the previous pose for one frame, but dispatch waits
         # until the classifier returns a usable observation again.
@@ -263,7 +278,7 @@ def _print_banner(config: AppConfig, cap) -> None:
     fps = cap.get(cv2.CAP_PROP_FPS) or 0.0
     print(f"\nNoMouse {__version__}")
     print(f"  Camera     {width}x{height} (driver reports {fps:.0f} fps)")
-    print(f"  Model      MediaPipe Hands, complexity {config.model_complexity}")
+    print("  Model      MediaPipe Tasks HandLandmarker (bundled local model)")
     print(f"  Smoothing  {config.cursor_smoothing:.2f}   (+ steadier, - faster)")
     print("  Press H in the preview window for the gesture guide, Q to quit.")
     print("  Fail-safe: move the physical mouse into a screen corner to pause control.\n")
@@ -418,3 +433,7 @@ def run(argv: Sequence[str] | None = None) -> int:
             except OSError as exc:
                 print(f"Could not save settings ({exc}).", file=sys.stderr)
     return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(run())

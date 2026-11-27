@@ -4,12 +4,19 @@ from nomouse.config import AppConfig, load_config, sanitize_config, save_config
 
 
 def test_sanitize_clamps_bad_numeric_settings():
-    config = AppConfig(cursor_smoothing=99.0, active_margin=-20.0, scroll_max_speed=-1.0, drag_hold_s=0.0)
+    config = AppConfig(
+        cursor_smoothing=99.0,
+        active_margin=-20.0,
+        scroll_max_speed=-1.0,
+        drag_hold_s=0.0,
+        camera_fps=100,
+    )
     checked = sanitize_config(config)
     assert checked.cursor_smoothing == 1.0
     assert checked.active_margin == 0.0
     assert checked.scroll_max_speed == 1.0
     assert checked.drag_hold_s == 0.25
+    assert checked.camera_fps == 60
 
 
 def test_load_config_ignores_unknown_keys_and_clamps_ranges(tmp_path):
@@ -106,3 +113,16 @@ def test_scroll_wheel_step_and_invert_are_validated(tmp_path):
     config = load_config(config_path)
     assert config.scroll_wheel_step == 120
     assert config.scroll_invert is False  # non-bool falls back to the default
+
+
+def test_invalid_pinch_threshold_and_interaction_flags_are_sanitized(tmp_path):
+    config_path = tmp_path / "settings.json"
+    config_path.write_text(json.dumps({
+        "pinch_threshold": 9.0,
+        "left_click_enabled": "disabled",
+        "scroll_enabled": False,
+    }))
+    config = load_config(config_path)
+    assert config.pinch_threshold == 0.50
+    assert config.left_click_enabled is True
+    assert config.scroll_enabled is False

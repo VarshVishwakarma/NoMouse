@@ -1,5 +1,5 @@
-"""Allow ``python -m nomouse`` as an alternative to ``python main.py``."""
-from nomouse.app import run
+"""Launch NoMouse with ``python -m nomouse``."""
+from nomouse.gui import main
 
 if __name__ == "__main__":
-    raise SystemExit(run())
+    raise SystemExit(main())

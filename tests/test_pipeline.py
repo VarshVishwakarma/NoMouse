@@ -195,6 +195,16 @@ def test_fist_is_idle_and_cursor_does_not_follow_the_curling_finger():
     assert rig.mouse.events == before
 
 
+def test_scroll_anchor_uses_palm_center_not_fingertip_position():
+    hand = two_finger_hand()
+    moved_tip = list(hand.landmarks)
+    moved_tip[8] = (moved_tip[8][0], moved_tip[8][1] + 0.06, moved_tip[8][2])
+    moved_tip_hand = HandObservation(tuple(moved_tip))
+    assert GesturePipeline._scroll_anchor_y(hand) == pytest.approx(
+        GesturePipeline._scroll_anchor_y(moved_tip_hand)
+    )
+
+
 def test_cursor_stays_put_while_pose_changes_from_point_to_pinch():
     # Regression: the confirmed gesture lags the hand by a frame, and the fingertip
     # moves as the fingers close. The pointer must not follow it before the click.

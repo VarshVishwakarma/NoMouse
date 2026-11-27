@@ -23,6 +23,8 @@ class MouseController:
         # This now means a two-finger gesture is currently active, not a toggle mode.
         self.scroll_mode = False
         self.dragging = False
+        self.held_buttons: set[str] = set()
+        self.fatal_input_error: str | None = None
         self._last_move_xy: tuple[int, int] | None = None
         self.pinch_started_at: float | None = None
         self.pinch_drag_started = False
@@ -60,6 +62,9 @@ class MouseController:
         self.notification_until = time.monotonic() + duration
 
     def toggle_enabled(self) -> None:
+        if self.fatal_input_error is not None:
+            self.notify("INPUT ERROR: RESTART REQUIRED", 3.0)
+            return
         self.enabled = not self.enabled
         # When re-enabled, resynchronize with the real system pointer; it may have
         # been moved manually while NoMouse was paused.
@@ -83,18 +88,23 @@ class MouseController:
             return False
 
     def _execute(self, method_name: str, *args, **kwargs) -> bool:
-        """Execute an OS input operation without crashing on input failures."""
+        """Execute input and fail closed when the operating-system API fails."""
         try:
             getattr(self.mouse_api, method_name)(*args, **kwargs)
             return True
         except self.fail_safe_exception:
-            self.enabled = False
-            self.release_all()
-            self.notify("FAIL-SAFE: CONTROL PAUSED", 3.0)
+            self._disable_after_input_error("FAIL-SAFE ACTIVATED")
             return False
         except Exception as exc:
-            self.notify(f"INPUT ERROR: {type(exc).__name__}", 2.0)
+            self._disable_after_input_error(f"{method_name} failed: {type(exc).__name__}")
             return False
+
+    def _disable_after_input_error(self, reason: str) -> None:
+        self.enabled = False
+        self.fatal_input_error = reason
+        self.notify(f"INPUT ERROR: {reason}", 3.0)
+        if self.held_buttons:
+            self.release_all()
 
     def move(self, x: int, y: int) -> None:
         """Send only meaningful pointer updates; skip duplicate sub-pixel outputs."""
@@ -196,20 +206,33 @@ class MouseController:
             if previous != Gesture.PINCH:
                 self.pinch_started_at = now
                 self.pinch_drag_started = False
-            if (not self.dragging and not self.action_lock and self.pinch_started_at is not None and
-                    now - self.pinch_started_at >= self.config.drag_hold_s):
-                if self._safe_action() and self._execute("mouseDown", button="left"):
+            if (
+                self.config.left_click_enabled
+                and not self.dragging
+                and not self.action_lock
+                and self.pinch_started_at is not None
+                and now - self.pinch_started_at >= self.config.drag_hold_s
+            ):
+                if self._safe_action():
+                    # A native input function can raise after changing OS state.
+                    # Track the uncertain state before crossing that boundary.
+                    self.held_buttons.add("left")
                     self.dragging = True
-                    self.pinch_drag_started = True
-                    self.notify("DRAGGING — RELEASE PINCH TO DROP")
+                    if self._execute("mouseDown", button="left"):
+                        self.pinch_drag_started = True
+                        self.notify("DRAGGING — RELEASE PINCH TO DROP")
             if self.dragging and index_xy is not None:
                 self.move(round(index_xy[0]), round(index_xy[1]))
         elif previous == Gesture.PINCH:
             if (not was_dragging and not just_dropped and not self.pinch_drag_started and
                     self.pinch_started_at is not None and gesture != Gesture.UNKNOWN):
                 held = now - self.pinch_started_at
-                if (held < self.config.drag_hold_s and not self.action_lock and
-                        now - self.last_click_at >= self.config.click_cooldown_s):
+                if (
+                    held < self.config.drag_hold_s
+                    and self.config.left_click_enabled
+                    and not self.action_lock
+                    and now - self.last_click_at >= self.config.click_cooldown_s
+                ):
                     self._emit_click("left", now)
             self.pinch_started_at = None
             self.pinch_drag_started = False
@@ -239,7 +262,7 @@ class MouseController:
             # frame. Do not fall back to the pointer coordinate and interpret a
             # transition pose as scroll movement; only a frame currently classified
             # as TWO_FINGERS may move the scroll engine.
-            if raw_gesture == Gesture.TWO_FINGERS and scroll_position_y is not None:
+            if self.config.scroll_enabled and raw_gesture == Gesture.TWO_FINGERS and scroll_position_y is not None:
                 self._handle_two_finger_scroll(scroll_position_y, now)
         else:
             self.scroll_mode = False
@@ -249,7 +272,7 @@ class MouseController:
                 suppress_click = gesture in (
                     Gesture.THREE_FINGERS, Gesture.FOUR_FINGERS, Gesture.OPEN_PALM, Gesture.UNKNOWN,
                 )
-                if (not self.two_finger_did_scroll and not self.two_finger_moved and
+                if (self.config.right_click_enabled and not self.two_finger_did_scroll and not self.two_finger_moved and
                         not suppress_click and held <= getattr(self.config, "right_click_tap_max_s", 0.45) and
                         not self.action_lock and now - self.last_right_click_at >= self.config.right_click_cooldown_s):
                     self._emit_click("right", now)
@@ -280,7 +303,7 @@ class MouseController:
             self.pending_double_click_since = None
             self.transition_guard = False
             cooled_down = now - self.last_browser_back_at >= self.config.browser_back_cooldown_s
-            if not self.action_lock and cooled_down and self._safe_action():
+            if self.config.browser_back_enabled and not self.action_lock and cooled_down and self._safe_action():
                 if self._execute("hotkey", "alt", "left"):
                     self.last_browser_back_at = now
                     self.action_lock = True
@@ -307,11 +330,18 @@ class MouseController:
         self.last_gesture = Gesture.UNKNOWN
 
     def release_all(self) -> None:
-        if self.dragging:
+        if "left" in self.held_buttons:
             try:
                 self.mouse_api.mouseUp(button="left")
-            except Exception:
-                pass
-        self.dragging = False
+            except Exception as exc:
+                self.enabled = False
+                self.fatal_input_error = f"mouseUp failed: {type(exc).__name__}"
+                self.notify(f"INPUT ERROR: {self.fatal_input_error}", 5.0)
+                self.dragging = True
+            else:
+                self.held_buttons.discard("left")
+                self.dragging = False
+        else:
+            self.dragging = False
         self.pinch_started_at = None
         self.pinch_drag_started = False
