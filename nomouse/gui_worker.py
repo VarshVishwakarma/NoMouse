@@ -106,8 +106,6 @@ class CameraWorker(QThread):
         try:
             import pyautogui
 
-            from .tracker import HandTracker
-
             backend = cv2.CAP_DSHOW if sys.platform == "win32" else cv2.CAP_ANY
             cap = cv2.VideoCapture(self.config.camera_index, backend)
             if not cap.isOpened():
@@ -121,6 +119,8 @@ class CameraWorker(QThread):
             cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
             if sys.platform == "win32":
                 cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+
+            from .tracker import HandTracker
 
             tracker = HandTracker(
                 self.config.max_hands,
